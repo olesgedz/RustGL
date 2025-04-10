@@ -1,106 +1,116 @@
+mod camera;
+mod shader;
+mod input;
+mod macros;
+mod model;
+mod mesh;
+
 extern crate glfw;
 extern crate gl;
 
+use std::ffi::CStr;
 use glfw::{Action, Context, Key};
 use std::ffi::CString;
 use std::ptr;
+use cgmath::*;
+use crate::camera::Camera;
+use crate::input::{process_input, process_events};
+use crate::shader::Shader;
 
-const VERTEX_SHADER_SRC: &str = "
-    #version 330 core
-    layout(location = 0) in vec3 aPos;
-     out vec3 Pos;
-    void main() {
-        gl_Position = vec4(aPos, 1.0);
-        Pos = vec3(aPos.x, aPos.y, aPos.z);
-    }
-";
-
-const FRAGMENT_SHADER_SRC: &str = "
-    #version 330 core
-    in vec3 Pos;
-    out vec4 FragColor;
-    void main() {
-        FragColor = vec4(Pos + 0.5, 1.0);
-    }
-";
+const SCR_WIDTH: u32 = 800;
+const SCR_HEIGHT: u32 = 600;
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
     glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
-
-    let (mut window, events) = glfw.create_window(800, 600, "OpenGL + GLFW in Rust", glfw::WindowMode::Windowed)
+    
+    let (mut window, events) = glfw.create_window(SCR_WIDTH, SCR_HEIGHT, "OpenGL + GLFW in Rust", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
     window.make_current();
-    window.set_key_polling(true);
+    window.set_framebuffer_size_polling(true);
+    window.set_cursor_pos_polling(true);
+    window.set_scroll_polling(true);
 
+    // tell GLFW to capture our mouse
+    window.set_cursor_mode(glfw::CursorMode::Disabled);
+    
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
-
+    
     let vertices: [f32; 9] = [
         -0.5, -0.5, 0.0,
         0.5, -0.5, 0.0,
         0.0,  0.5, 0.0,
     ];
-
+    
     let mut vbo: u32 = 0;
     let mut vao: u32 = 0;
     unsafe {
         gl::GenVertexArrays(1, &mut vao);
         gl::GenBuffers(1, &mut vbo);
-
+    
         gl::BindVertexArray(vao);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(gl::ARRAY_BUFFER,
                        (vertices.len() * std::mem::size_of::<f32>()) as isize,
                        vertices.as_ptr() as *const _,
                        gl::STATIC_DRAW);
-
+    
         gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * std::mem::size_of::<f32>() as i32, ptr::null());
         gl::EnableVertexAttribArray(0);
     }
+    
+    let shader_program  = Shader::new("./assets/shaders/camera.vert", "./assets/shaders/camera.frag");
 
-    let shader_program = unsafe {
-        let vertex_shader = gl::CreateShader(gl::VERTEX_SHADER);
-        let c_str_vert = CString::new(VERTEX_SHADER_SRC.as_bytes()).unwrap();
-        gl::ShaderSource(vertex_shader, 1, &c_str_vert.as_ptr(), ptr::null());
-        gl::CompileShader(vertex_shader);
-
-        let fragment_shader = gl::CreateShader(gl::FRAGMENT_SHADER);
-        let c_str_frag = CString::new(FRAGMENT_SHADER_SRC.as_bytes()).unwrap();
-        gl::ShaderSource(fragment_shader, 1, &c_str_frag.as_ptr(), ptr::null());
-        gl::CompileShader(fragment_shader);
-
-        let shader_program = gl::CreateProgram();
-        gl::AttachShader(shader_program, vertex_shader);
-        gl::AttachShader(shader_program, fragment_shader);
-        gl::LinkProgram(shader_program);
-
-        gl::DeleteShader(vertex_shader);
-        gl::DeleteShader(fragment_shader);
-
-        shader_program
+    let mut camera = Camera {
+        position: Point3::new(0.0, 0.0, 3.0),
+        ..Camera::default()
     };
+    
+    let mut firstMouse = true;
+    let mut lastX: f32 = SCR_WIDTH as f32 / 2.0;
+    let mut lastY: f32 = SCR_HEIGHT as f32 / 2.0;
+
+    // timing
+    let mut deltaTime: f32; // time between current frame and last frame
+    let mut lastFrame: f32 = 0.0;
+
 
     while !window.should_close() {
-        glfw.poll_events();
-        for (_, event) in glfw::flush_messages(&events) {
-            match event {
-                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                    window.set_should_close(true);
-                }
-                _ => {}
-            }
-        }
+        let currentFrame = glfw.get_time() as f32;
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // events
+        // -----
+        process_events(&events, &mut firstMouse, &mut lastX, &mut lastY, &mut camera);
+
+        // input
+        // -----
+        process_input(&mut window, deltaTime, &mut camera);
+
 
         unsafe {
             gl::ClearColor(0.2, 0.3, 0.3, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    
+            gl::UseProgram(shader_program.id);
 
-            gl::UseProgram(shader_program);
+            let projection: Matrix4<f32> = perspective(Deg(camera.zoom), SCR_WIDTH as f32 / SCR_HEIGHT as f32, 0.1, 100.0);
+            let view = camera.get_view_matrix();
+            shader_program.set_mat4(c_str!("projection"), &projection);
+            shader_program.set_mat4(c_str!("view"), &view);
+
+            // render the loaded model
+            let mut model = Matrix4::<f32>::from_translation(vec3(0.0, 0.0, 0.0)); // translate it down so it's at the center of the scene
+            // model = model * Matrix4::from_scale(0.2);
+            shader_program.set_mat4(c_str!("model"), &model);
             gl::BindVertexArray(vao);
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
-
+    
         window.swap_buffers();
+        glfw.poll_events();
     }
+    
 }
