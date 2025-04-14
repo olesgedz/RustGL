@@ -14,7 +14,12 @@ macro_rules! c_str {
 /// Get offset to struct member, similar to `offset_of` in C/C++
 /// From https://stackoverflow.com/questions/40310483/how-to-get-pointer-offset-in-bytes/40310851#40310851
 macro_rules! offset_of {
-    ($ty:ty, $field:ident) => {
-        &(*(ptr::null() as *const $ty)).$field as *const _ as usize
-    }
+    ($type:ty, $field:tt) => ({
+        let dummy = ::core::mem::MaybeUninit::<$type>::uninit();
+
+        let dummy_ptr = dummy.as_ptr();
+        let member_ptr = unsafe{ ::core::ptr::addr_of!((*dummy_ptr).$field) };
+        
+        member_ptr as usize - dummy_ptr as usize
+    })
 }

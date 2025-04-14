@@ -7,16 +7,20 @@ mod mesh;
 
 extern crate glfw;
 extern crate gl;
+extern crate imgui_opengl_renderer;
+extern crate imgui;
 
 use std::ffi::CStr;
 use glfw::{Action, Context, Key};
 use std::ffi::CString;
 use std::ptr;
+use imgui::*;
 use cgmath::*;
 use crate::camera::Camera;
 use crate::input::{process_input, process_events};
 use crate::model::Model;
 use crate::shader::Shader;
+
 
 const SCR_WIDTH: u32 = 800;
 const SCR_HEIGHT: u32 = 600;
@@ -37,6 +41,12 @@ fn main() {
     window.set_cursor_mode(glfw::CursorMode::Disabled);
     
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+
+    // Imgui
+    let mut imgui = imgui::Context::create();
+
+    let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui, |s|  window.get_proc_address(s) as *const _);
+
 
     unsafe { gl::Enable(gl::DEPTH_TEST); }
     
@@ -94,6 +104,13 @@ fn main() {
         // -----
         process_input(&mut window, deltaTime, &mut camera);
 
+        // Start a new ImGui frame
+        let (width, height) = window.get_framebuffer_size();
+        imgui.io_mut().display_size = [width as f32, height as f32];
+        let ui = imgui.frame();
+
+        // Show ImGui demo window
+            ui.show_demo_window(&mut true);
 
         unsafe {
             gl::ClearColor(0.2, 0.3, 0.3, 1.0);
@@ -112,7 +129,7 @@ fn main() {
             shader_program.set_mat4(c_str!("model"), &model);
             entity.draw(&shader_program);
         }
-    
+        renderer.render(&mut imgui);
         window.swap_buffers();
         glfw.poll_events();
     }
