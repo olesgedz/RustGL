@@ -4,6 +4,7 @@ mod input;
 mod macros;
 mod model;
 mod mesh;
+mod debug;
 
 extern crate glfw;
 extern crate gl;
@@ -17,6 +18,7 @@ use std::ptr;
 use imgui::*;
 use cgmath::*;
 use crate::camera::Camera;
+use debug::*;
 use crate::input::{process_input, process_events};
 use crate::model::Model;
 use crate::shader::Shader;
@@ -43,13 +45,12 @@ fn main() {
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
     // Imgui
-    // let mut imgui = imgui::Context::create();
-    // 
-    // let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui, |s|  window.get_proc_address(s) as *const _);
-    // 
+    let mut imgui = imgui::Context::create();
+
+    let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui, |s|  window.get_proc_address(s) as *const _);
 
     unsafe { gl::Enable(gl::DEPTH_TEST); }
-    
+
     // let vertices: [f32; 9] = [
     //     -0.5, -0.5, 0.0,
     //     0.5, -0.5, 0.0,
@@ -108,9 +109,9 @@ fn main() {
         // let (width, height) = window.get_framebuffer_size();
         // imgui.io_mut().display_size = [width as f32, height as f32];
         // let ui = imgui.frame();
-
-        // Show ImGui demo window
-        //     ui.show_demo_window(&mut true);
+        //
+        // // Show ImGui demo window
+        // ui.show_demo_window(&mut true);
 
         unsafe {
             gl::ClearColor(0.2, 0.3, 0.3, 1.0);
@@ -128,6 +129,7 @@ fn main() {
             model = model * Matrix4::from_scale(0.2);
             shader_program.set_mat4(c_str!("model"), &model);
             entity.draw(&shader_program);
+            gl_check_error!();
         }
         // renderer.render(&mut imgui);
         window.swap_buffers();

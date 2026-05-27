@@ -9,7 +9,8 @@ use gl::types::*;
 
 use cgmath::{Matrix, Matrix4, Vector3};
 use cgmath::prelude::*;
-use glm::*;
+use crate::debug::*;
+use crate::gl_check_error;
 
 pub struct Shader {
     pub id: u32,
@@ -18,6 +19,7 @@ pub struct Shader {
 #[allow(dead_code)]
 impl Shader {
     pub fn new(vertex_path: &str, fragment_path: &str) -> Shader {
+
         let mut shader = Shader { id: 0 };
         // 1. retrieve the vertex/fragment source code from filesystem
         let mut v_shader_file = File::open(vertex_path)
@@ -62,8 +64,8 @@ impl Shader {
             gl::DeleteShader(vertex);
             gl::DeleteShader(fragment);
             shader.id = id;
+            gl_check_error!();
         }
-
         shader
     }
 
