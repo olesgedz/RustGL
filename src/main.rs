@@ -76,7 +76,7 @@ fn main() {
     
     let shader_program  = Shader::new("./assets/shaders/model.vert", "./assets/shaders/model.frag");
 
-    let entity = Model::new("./assets/models/nanosuit/nanosuit.obj");
+    let entity = Model::new("./assets/models/planet/planet.obj");
     
     let mut camera = Camera {
         position: Point3::new(0.0, 0.0, 3.0),
